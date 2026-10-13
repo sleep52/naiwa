@@ -1,0 +1,80 @@
+/* ============ 奶蛙形象：贴图身体 + 代码五官 ============
+   身体是三视图正面立绘的抠图（原图五官已离线抹平），
+   眼睛和嘴用代码画，所以表情、视线、张嘴都能变。 */
+const SPR_B64='data:image/png;base64,__SPR_B64__';
+const SPR=new Image();
+const SPR_AX=115.2,SPR_BASE=322,SPR_FH=316;   /* 图内坐标：面部中轴 / 脚底 / 身高 */
+let sprReady=false;
+SPR.onload=()=>{sprReady=true;buildPreviews();};
+SPR.src=SPR_B64;
+
+const EYE_X=.0848,EYE_Y=-.908,EYE_R=.040,MOUTH_Y=-.832;
+
+function drawWa(c,o){
+  const h=o.h||160,u=h,
+        sq=o.sq===undefined?1:o.sq,
+        belly=o.belly===undefined?1:o.belly,
+        face=o.face||'idle',leg=o.leg||'stand',
+        ph=o.ph||0,flip=!!o.flip;
+  const sy=sq,sx=1/Math.pow(Math.max(.55,Math.min(1.45,sq)),.45);
+  c.save();
+  c.translate(o.x,o.y);
+  if(flip)c.scale(-1,1);
+  c.scale(sx*(1+(belly-1)*.55),sy*(1-(belly-1)*.16));
+  if(leg==='run'){
+    c.rotate(Math.sin(ph*11)*.05);
+    c.translate(0,-Math.abs(Math.sin(ph*11))*.02*u);
+  }
+  if(o.alpha!==undefined)c.globalAlpha=o.alpha;
+  if(!sprReady){c.restore();return;}
+  const s=u/SPR_FH;
+  c.save();c.scale(s,s);c.drawImage(SPR,-SPR_AX,-SPR_BASE);c.restore();
+
+  /* 眼睛：靠得较近的一对绿珠子 */
+  const ex=EYE_X*u,ey=EYE_Y*u,er=EYE_R*u;
+  const closed=face==='laugh'||face==='happy'||face==='strain'||face==='sleep';
+  let gr;
+  if(closed){
+    c.strokeStyle=PAL.line;c.lineWidth=.019*u;c.lineCap='round';
+    const up=face==='strain'||face==='sleep'?1:-1;
+    for(const sd of[-1,1]){
+      c.beginPath();
+      c.moveTo(sd*ex-.040*u,ey+(up>0?-.014*u:.012*u));
+      c.quadraticCurveTo(sd*ex,ey+(up>0?.034*u:-.036*u),sd*ex+.040*u,ey+(up>0?-.014*u:.012*u));
+      c.stroke();
+    }
+  }else{
+    const big=face==='surprise'?1.3:1;
+    for(const sd of[-1,1]){
+      gr=c.createRadialGradient(sd*ex-.01*u,ey-.014*u,.002*u,sd*ex,ey,er*big);
+      gr.addColorStop(0,'#7CCB6E');gr.addColorStop(.65,PAL.iris);gr.addColorStop(1,PAL.irisLo);
+      c.fillStyle=gr;c.beginPath();c.arc(sd*ex,ey,er*big,0,6.2832);c.fill();
+      c.fillStyle=PAL.pupil;c.beginPath();c.arc(sd*ex+(o.look||0)*.012*u,ey+.002*u,er*big*.44,0,6.2832);c.fill();
+      c.fillStyle=PAL.glint;c.globalAlpha=.9;c.beginPath();c.arc(sd*ex-.014*u,ey-.016*u,er*big*.20,0,6.2832);c.fill();c.globalAlpha=1;
+    }
+  }
+
+  /* 嘴：默认就是很小的一条线 */
+  const my=MOUTH_Y*u;
+  c.lineCap='round';
+  if(face==='laugh'||face==='happy'||face==='eat'){
+    const w=(face==='laugh'?.095:face==='eat'?.085:.070)*u, hh=(face==='laugh'?.075:.05)*u;
+    c.fillStyle=PAL.mouth;c.beginPath();
+    c.moveTo(-w,my-.01*u);
+    c.quadraticCurveTo(0,my+.02*u,w,my-.01*u);
+    c.quadraticCurveTo(w*.7,my+hh,0,my+hh);
+    c.quadraticCurveTo(-w*.7,my+hh,-w,my-.01*u);
+    c.closePath();c.fill();
+    c.fillStyle=PAL.tongue;ell(c,0,my+hh*.66,w*.5,hh*.3);
+  }else if(face==='oh'||face==='surprise'){
+    c.fillStyle=PAL.mouth;ell(c,0,my+.006*u,face==='surprise'?.044*u:.030*u,face==='surprise'?.046*u:.032*u);
+  }else if(face==='strain'){
+    c.fillStyle=PAL.mouth;rr(c,-.060*u,my-.014*u,.12*u,.028*u,.012*u);
+    c.fillStyle=PAL.tooth;c.fillRect(-.055*u,my-.008*u,.11*u,.006*u);
+  }else{
+    c.strokeStyle=PAL.line;c.lineWidth=.016*u;
+    c.beginPath();c.moveTo(-.055*u,my-.006*u);
+    c.quadraticCurveTo(0,my+(face==='sleep'?-.004*u:.012*u),.055*u,my-.006*u);c.stroke();
+  }
+  c.restore();
+}

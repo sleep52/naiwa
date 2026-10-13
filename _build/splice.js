@@ -1,0 +1,10 @@
+const fs=require('fs');
+const src=fs.readFileSync('index.html','utf8');
+const rep=fs.readFileSync('_build/char.txt','utf8');
+const A='/* ============ 奶蛙形象';
+const B='function shadow(c,x,y,rx,a)';
+const i=src.indexOf(A),j=src.indexOf(B);
+if(i<0||j<0||j<i)throw new Error('markers not found');
+const out=src.slice(0,i)+rep+src.slice(j);
+fs.writeFileSync('_build/index.src.html',out);
+console.log('spliced',src.length,'->',out.length);
