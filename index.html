@@ -57,6 +57,13 @@ canvas#game{display:block;width:100%;height:100%}
   color:#f4e3bd;text-shadow:0 2px 8px rgba(0,0,0,.65);pointer-events:none}
 .hint[hidden]{display:none}
 
+.coin{position:fixed;top:12px;left:50%;transform:translateX(-50%);padding:7px 20px;border-radius:999px;
+  background:linear-gradient(180deg,#ffe9a8,#f0b53c);color:#5b3d10;font-weight:900;font-size:15px;
+  letter-spacing:2px;box-shadow:0 4px 0 rgba(140,90,20,.55),0 10px 22px rgba(0,0,0,.35);pointer-events:none}
+.coin[hidden]{display:none}
+.coin.bump{animation:bump .36s}
+@keyframes bump{0%{transform:translateX(-50%) scale(1)}32%{transform:translateX(-50%) scale(1.24)}100%{transform:translateX(-50%) scale(1)}}
+
 .toast{position:fixed;top:36%;left:0;right:0;text-align:center;pointer-events:none;
   font-size:clamp(28px,5.5vw,52px);font-weight:900;letter-spacing:5px;color:#ffe9a8;
   text-shadow:0 4px 0 #c07f18,0 12px 34px rgba(0,0,0,.6);opacity:0;transform:translateY(14px);
@@ -73,6 +80,7 @@ canvas#game{display:block;width:100%;height:100%}
   <div class="hud-r"><span id="hudStat"></span><em id="hudNote"></em></div>
 </div>
 <div id="hint" class="hint" hidden></div>
+<div id="coinEl" class="coin" hidden>¥ 0</div>
 
 <section id="scrTitle" class="screen">
   <div class="poster">
@@ -91,9 +99,11 @@ canvas#game{display:block;width:100%;height:100%}
       <button class="card" data-mode="jump"><canvas class="prev"></canvas><b>大肚子弹跳</b><i>按住空格蓄力<br>把肚子当弹簧</i></button>
       <button class="card" data-mode="catch"><canvas class="prev"></canvas><b>万物皆可吃</b><i>接住好吃的<br>躲开减肥餐</i></button>
       <button class="card" data-mode="fire"><canvas class="prev"></canvas><b>喷火大作战</b><i>蓄力喷火<br>击退小怪</i></button>
+      <button class="card" data-mode="shop"><canvas class="prev"></canvas><b>奶蛙小卖部</b><i>招呼客人补货<br>小心混进来的小偷</i></button>
+      <button class="card" data-mode="mine"><canvas class="prev"></canvas><b>舌头矿工</b><i>甩舌头抓矿<br>越沉的拉得越慢</i></button>
       <button class="card" data-mode="pet"><canvas class="prev"></canvas><b>养一只奶蛙</b><i>戳肚子听 duang<br>没有输赢</i></button>
     </div>
-    <div class="keys">空格 / 方向键 / 鼠标拖拽 都能玩 &nbsp;·&nbsp; ESC 回菜单 &nbsp;·&nbsp; M 静音</div>
+    <div class="keys">空格 / 方向键 / 鼠标拖拽 都能玩 &nbsp;·&nbsp; ESC 回菜单 &nbsp;·&nbsp; M 静音<br>六个模式共用一个钱袋，挖来的钱能进货，赚的钱能买粮</div>
   </div>
 </section>
 
@@ -126,6 +136,43 @@ function spring(o,dt,k,d,tgt){
   o.sq+=o.sqV*dt;
 }
 function punch(o,sq,v){o.sq=sq;o.sqV=v===undefined?0:v;}
+
+/* ============ 存档：六个模式共用一个钱袋 ============
+   file:// 下浏览器不一定给 localStorage，取不到就退化成"只活在这一局"，
+   游戏照常玩，只是关掉页面不记账。 */
+const SAVE_KEY='naiwa.save.v1';
+const coinEl=document.getElementById('coinEl');
+function blankSave(){
+  return {coin:0,bag:0,day:1,depth:1,
+    up:{hook:0,pull:0,rope:0,shelf:0,deco:0,restock:0},
+    best:{jump:0,catch:0,fire:0,shop:0,mine:0}};
+}
+let SAVE=(()=>{
+  const d=blankSave();
+  try{
+    const raw=localStorage.getItem(SAVE_KEY);
+    if(!raw)return d;
+    const o=JSON.parse(raw);
+    return {coin:+o.coin||0, bag:+o.bag||0, day:+o.day||1, depth:+o.depth||1,
+      up:Object.assign(d.up,o.up||{}), best:Object.assign(d.best,o.best||{})};
+  }catch(e){return d;}
+})();
+function saveNow(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE));}catch(e){}}
+function addCoin(n){
+  n=Math.round(n);if(!n)return;
+  SAVE.coin=Math.max(0,SAVE.coin+n);
+  saveNow();
+  coinEl.textContent='¥ '+SAVE.coin;
+  if(n>0){coinEl.classList.remove('bump');void coinEl.offsetWidth;coinEl.classList.add('bump');}
+}
+function best(k,v){if(v>SAVE.best[k]){SAVE.best[k]=v;saveNow();return true;}return false;}
+/* 升级价格：两个新模式共用一张价目表 */
+const UPC={
+  hook:l=>80+l*90,pull:l=>90+l*100,rope:l=>110+l*120,
+  shelf:l=>130+l*150,deco:l=>95+l*120,restock:l=>60+l*45
+};
+addEventListener('visibilitychange',()=>{if(document.hidden)saveNow();});
+addEventListener('pagehide',saveNow);
 
 /* ============ 输入 ============ */
 const key={},tapKey={};
@@ -185,7 +232,11 @@ const sfx={
   pop(n){const m=Math.pow(1.0595,Math.min(16,n||0));tone(620*m,980*m,.10,'triangle',.11);},
   win(){[523,659,784,1047].forEach((f,i)=>tone(f,f,.24,'triangle',.12,i*.12));},
   burp(){tone(180,60,.35,'sawtooth',.09);noiseBurst(.2,300,.09);},
-  pat(){tone(420,300,.12,'sine',.09);}
+  pat(){tone(420,300,.12,'sine',.09);},
+  coin(){tone(1180,1600,.07,'square',.06);tone(1760,2300,.07,'square',.05,.05);},
+  bell(){tone(1500,1480,.22,'triangle',.08);tone(2250,2200,.3,'sine',.04,.02);},
+  truck(){tone(90,70,.5,'sawtooth',.09);noiseBurst(.3,160,.07,.8);},
+  snap(){noiseBurst(.05,1400,.12,2);tone(900,300,.06,'square',.06);}
 };
 
 /* ============ 调色（照三视图） ============ */
@@ -335,10 +386,10 @@ function drawItem(c,t,x,y,r,rot){
   }
   c.restore();
 }
-function drawMinion(c,x,y,h,ph,flip,hurt){
+function drawMinion(c,x,y,h,ph,flip,hurt,col){
   const u=h;
   c.save();c.translate(x,y);if(flip)c.scale(-1,1);
-  const body=hurt?'#E8907A':'#6E9C5C',head=hurt?'#D97B64':'#5C8A4A';
+  const body=hurt?'#E8907A':(col?col.body:'#6E9C5C'),head=hurt?'#D97B64':(col?col.head:'#5C8A4A');
   c.beginPath();
   c.moveTo(0,-.98*u);
   c.bezierCurveTo(.16*u,-.98*u,.20*u,-.86*u,.20*u,-.74*u);
@@ -408,6 +459,45 @@ function drawParts(c,camx){
     c.translate(p.x-(camx||0),p.y);c.rotate(p.rot+p.l*6);c.fillRect(-p.r,-p.r,p.r*2,p.r*2);c.restore();}
 }
 
+/* ============ 小工具：可复现随机 + 面板按钮 ============ */
+function rngOf(seed){
+  let a=seed|0;
+  return function(){a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+}
+const todayNum=()=>Math.floor(Date.now()/864e5);
+function drawBtns(c,list){
+  c.textAlign='center';
+  for(const b of list){
+    const off=b.cost!==undefined&&b.cost>SAVE.coin;
+    c.fillStyle=off?'rgba(214,200,176,.86)':(b.hover?'#FFE9A8':'rgba(255,248,232,.95)');
+    rr(c,b.x,b.y,b.w,b.h,13);
+    c.strokeStyle=off?'rgba(120,90,40,.25)':'rgba(120,80,20,.4)';c.lineWidth=2;
+    c.beginPath();c.roundRect(b.x,b.y,b.w,b.h,13);c.stroke();
+    c.fillStyle=off?'#9c8a68':'#6B4A12';c.font=FONT(16,800);
+    c.fillText(b.label,b.x+b.w/2,b.y+b.h/2+(b.sub?-4:6));
+    if(b.sub){c.font=FONT(12,700);c.fillStyle=off?'#a89274':'#94794a';c.fillText(b.sub,b.x+b.w/2,b.y+b.h/2+15);}
+  }
+}
+/* 返回这一帧被点到的按钮；顺手把 hover 标上 */
+function clickBtns(list){
+  let hit=null;
+  for(const b of list){
+    b.hover=ptr.x>=b.x&&ptr.x<=b.x+b.w&&ptr.y>=b.y&&ptr.y<=b.y+b.h;
+    if(b.hover&&ptr.tapped)hit=b;
+  }
+  return hit;
+}
+function panelBg(c,title,sub){
+  c.fillStyle='rgba(40,26,10,.62)';c.fillRect(0,0,W,H);
+  const w=Math.min(560,W-40),h=300,x=W/2-w/2,y=H/2-h/2;
+  c.fillStyle='rgba(255,246,224,.97)';rr(c,x,y,w,h,22);
+  c.strokeStyle='rgba(150,105,30,.4)';c.lineWidth=3;c.beginPath();c.roundRect(x,y,w,h,22);c.stroke();
+  c.textAlign='center';c.fillStyle='#6B4A12';c.font=FONT(26,900);c.fillText(title,W/2,y+48);
+  if(sub){c.font=FONT(14,700);c.fillStyle='#94794a';c.fillText(sub,W/2,y+74);}
+  return {x,y,w,h};
+}
+
 /* ============ 场景框架 ============ */
 let scene='title';
 const el={
@@ -418,10 +508,11 @@ const el={
   toast:document.getElementById('toastEl')
 };
 function setHud(mode,sub,stat,note,hintText){
-  el.hud.hidden=false;el.hint.hidden=false;
+  el.hud.hidden=false;el.hint.hidden=false;coinEl.hidden=false;
   el.mode.textContent=mode;el.sub.textContent=sub||'';
   el.stat.textContent=stat||'';el.note.textContent=note||'';
   el.hint.textContent=hintText||'';
+  coinEl.textContent='¥ '+SAVE.coin;
 }
 let toastTimer=0;
 function toast(txt,ms){
@@ -432,7 +523,7 @@ function toast(txt,ms){
 }
 function showScreen(which){
   el.title.hidden=which!=='title';el.menu.hidden=which!=='menu';
-  el.hud.hidden=which!=='none';el.hint.hidden=which!=='none';
+  el.hud.hidden=which!=='none';el.hint.hidden=which!=='none';coinEl.hidden=which!=='none';
 }
 function goMenu(){if(scene!=='menu'&&scene!=='title')openMenu();}
 function openMenu(){scene='menu';showScreen('menu');buildPreviews();}
@@ -463,11 +554,14 @@ const titleScene={
 };
 let previewsBuilt=false;
 function buildPreviews(){
-  if(previewsBuilt)return;previewsBuilt=true;
+  if(previewsBuilt||!sprReady)return;
+  previewsBuilt=true;
   const poses=[
     {face:'strain',arm:'belly',sq:.80,belly:.94},
     {face:'laugh',arm:'up',belly:1.24},
     {face:'happy',arm:'cheek',sq:1.06},
+    {face:'oh',arm:'up',sq:1.04},
+    {face:'strain',arm:'down',sq:.92},
     {face:'sleep',arm:'belly',leg:'sit'}
   ];
   document.querySelectorAll('.card').forEach((card,i)=>{
@@ -478,12 +572,18 @@ function buildPreviews(){
     const gr=c2.createLinearGradient(0,0,0,h2);
     gr.addColorStop(0,'#FDFDFC');gr.addColorStop(1,'#EAE6DE');
     c2.fillStyle=gr;c2.fillRect(0,0,w,h2);
-    const p=poses[i];
+    const p=poses[i%poses.length];
     shadow(c2,w/2,h2-12,40,.14);
     drawWa(c2,{x:w/2,y:h2-12,h:104,face:p.face,arm:p.arm,sq:p.sq||1,belly:p.belly||1,leg:p.leg||'stand'});
-    if(i===2){c2.fillStyle='#F08A2A';c2.beginPath();
+    if(i===1){c2.fillStyle='#F08A2A';c2.beginPath();
       c2.moveTo(w/2+26,h2-64);c2.quadraticCurveTo(w/2+58,h2-74,w/2+70,h2-56);
       c2.quadraticCurveTo(w/2+50,h2-52,w/2+26,h2-52);c2.closePath();c2.fill();}
+    if(i===3)drawItem(c2,'milk',w/2+44,h2-52,16,-.2);
+    if(i===4){
+      c2.strokeStyle='#DE7E74';c2.lineWidth=7;c2.lineCap='round';
+      c2.beginPath();c2.moveTo(w/2+8,h2-70);c2.lineTo(w/2+52,h2-24);c2.stroke();
+      drawLoot(c2,'goldmelon',w/2+58,h2-18,15,.2);
+    }
   });
 }
 
@@ -511,7 +611,7 @@ const jump={
   },
   next(){
     if(this.st<LEVELS.length-1){this.st++;this.load(this.st);toast(LEVELS[this.st].name,1000);}
-    else{openMenu();toast(`三关弹完，收了 ${this.got} 串`,1800);}
+    else{best('jump',this.got);addCoin(this.got*4);openMenu();toast(`三关弹完，收了 ${this.got} 串`,1800);}
   },
   update(dt){
     const p=this.p;this.gy=groundY();
@@ -717,7 +817,7 @@ const catchMode={
     this.sad=Math.max(0,this.sad-dt*1.6);
     if(this.shake)this.shake=Math.max(0,this.shake-dt*40);
     for(let i=this.floats.length-1;i>=0;i--){const f=this.floats[i];f.y-=42*dt;f.l-=dt;if(f.l<=0)this.floats.splice(i,1);}
-    if(this.hp<=0){openMenu();toast(`吃饱 ${this.eaten} 口，最后败给了一份草`,2200);return;}
+    if(this.hp<=0){best('catch',this.eaten);addCoin(this.eaten);openMenu();toast(`吃饱 ${this.eaten} 口，最后败给了一份草`,2200);return;}
     const wave=1+Math.floor(this.t/25);
     setHud('万物皆可吃',`第 ${wave} 波 · 下落 ×${this.speed.toFixed(1)}`,
       '♥'.repeat(Math.max(0,this.hp))+'♡'.repeat(Math.max(0,3-this.hp)),
@@ -803,7 +903,7 @@ const fireMode={
       if(Math.abs(f.x-this.x)<f.h*.32+32&&Math.abs(f.y-this.y)<f.h*.8&&this.hurtT<=0){
         this.hp--;this.hurtT=1.2;this.shake=20;punch(this,.66,2.5);hitStop(.11);sfx.bad();
         this.x-=this.dir*70;burst(this.x,this.y-70,14,['#E1495A','#FFFDF4'],240,.5,4);
-        if(this.hp<=0){openMenu();toast(`烧退了 ${this.kills} 个`,2200);return;}
+        if(this.hp<=0){best('fire',this.kills);addCoin(this.kills*3);openMenu();toast(`烧退了 ${this.kills} 个`,2200);return;}
       }
       if(f.x<this.cam-340||f.x>this.cam+W+420)this.foes.splice(i,1);
     }
@@ -883,7 +983,7 @@ const pet={
   init(){
     this.hgt=Math.min(240,H*.34);this.x=W*.5;this.y=groundY();this.vx=0;
     this.sq=1;this.belly=1;this.face='idle';this.arm='down';this.leg='stand';
-    this.mood=.6;this.food=6;this.state='idle';this.timer=2;this.ph=0;this.wob=0;
+    this.mood=.6;this.food=SAVE.bag;this.state='idle';this.timer=2;this.ph=0;this.wob=0;
     this.zzz=0;this.breath=0;this.pokeT=0;this.bubble=null;this.bubbleT=0;this.shake=0;
   },
   update(dt){
@@ -918,11 +1018,11 @@ const pet={
         this.poke('head');
       }else if(Math.hypot((ptr.x-this.x)*.8,(ptr.y-bellyY))<this.hgt*.30){
         this.poke('belly');
-      }else if(ptr.x>W-150&&ptr.y>this.y-70&&this.food>0){
+      }else if(ptr.x>W-150&&ptr.y>this.y-70){
         this.eat();
       }
     }
-    if(kTap('KeyF')&&this.food>0)this.eat();
+    if(kTap('KeyF'))this.eat();
     if(kTap('KeyS')){this.state=this.state==='sleep'?'idle':'sleep';this.zzz=0;this.say(this.state==='sleep'?'zzZ…':'醒了！');}
     if(kTap('KeyH')){this.face='laugh';this.arm='up';this.wob=2;punch(this,.68,3);this.pokeT=1.2;this.belly=1.08;
       sfx.burp();this.shake=8;this.say('嗝——');
@@ -931,7 +1031,7 @@ const pet={
     if(this.bubbleT>0){this.bubbleT-=dt;if(this.bubbleT<=0)this.bubble=null;}
     updateParts(dt);
     setHud('养一只奶蛙','心情 '+'▮'.repeat(Math.round(this.mood*5))+'▯'.repeat(5-Math.round(this.mood*5)),
-      '饭盆 ×'+this.food,'F 喂食 · S 哄睡 · H 打嗝',
+      '饭盆 ×'+this.food+(this.food?'':'（点饭盆花 ¥15 买）'),'F 喂食 · S 哄睡 · H 打嗝',
       '点脑袋、点肚子、点右边饭盆。它不评分，也不会有结局。');
   },
   poke(where){
@@ -947,8 +1047,13 @@ const pet={
     }
   },
   eat(){
-    if(this.food<=0){this.say('没了…');return;}
-    this.food--;this.belly=1.2;this.face='laugh';this.arm='belly';this.pokeT=1.3;this.wob=1.5;
+    if(this.food<=0){
+      if(SAVE.coin<15){this.say('饭盆空了，钱也不够买…');sfx.bad();return;}
+      addCoin(-15);SAVE.bag=this.food=3;saveNow();
+      this.say('买了三份，¥15');sfx.bell();return;
+    }
+    this.food--;SAVE.bag=this.food;saveNow();
+    this.belly=1.2;this.face='laugh';this.arm='belly';this.pokeT=1.3;this.wob=1.5;
     this.mood=Math.min(1,this.mood+.14);punch(this,.84,2);
     sfx.chomp();setTimeout(()=>sfx.gulp(),190);
     burst(this.x,this.y-this.hgt*.5,12,['#F7C63C','#A2542C'],200,.6,4);
@@ -966,7 +1071,7 @@ const pet={
     g.fillStyle='#B8433B';rr(g,bowlX-42,this.y-26,84,26,8);
     g.fillStyle='#D8D2C4';ell(g,bowlX,this.y-26,42,10);
     g.fillStyle='#FDF4DE';ell(g,bowlX,this.y-28,34,7);
-    g.fillStyle='#7A4A22';for(let i=0;i<this.food;i++)ell(g,bowlX-24+i*11,this.y-32,5,4);
+    g.fillStyle='#7A4A22';for(let i=0;i<Math.min(6,this.food);i++)ell(g,bowlX-24+i*11,this.y-32,5,4);
     g.fillStyle='#6B5228';g.font=FONT(12,700);g.textAlign='center';g.fillText('饭盆',bowlX,this.y+16);
     const wob=Math.sin(this.ph*13)*this.wob;
     shadow(g,this.x,this.y+2,this.hgt*.32+wob*3,.18);
@@ -993,8 +1098,522 @@ const pet={
   }
 };
 
+/* ============ 模式五：奶蛙小卖部 ============ */
+const WARES=['skewer','milk','melon','ice','cake','hotpot'];
+const PRICE={skewer:6,milk:9,melon:14,ice:8,cake:18,hotpot:26};
+const GUEST={
+  normal:{n:'村民',pat:1,pay:1,body:'#6E9C5C',head:'#5C8A4A',sc:1},
+  rush:{n:'急客',pat:.42,pay:2.7,body:'#D9724A',head:'#B95433',sc:.9},
+  big:{n:'大胃王',pat:1.3,pay:3.2,body:'#7F93C4',head:'#5F73A6',sc:1.42},
+  thief:{n:'小偷',pat:1,pay:0,body:'#6B5A7A',head:'#4E3F5C',sc:.95}
+};
+const shop={
+  init(){
+    this.day=SAVE.day;this.phase='open';this.slots=null;this.open();
+  },
+  open(){
+    const n=3+Math.min(2,SAVE.up.shelf);
+    if(!this.slots||this.slots.length!==n){
+      this.slots=[];for(let i=0;i<n;i++)this.slots.push({t:WARES[i],stock:8,cap:8});
+    }
+    for(const s of this.slots)s.stock=s.cap;
+    this.sel=Math.min(this.sel||0,n-1);
+    this.money=0;this.served=0;this.lost=0;this.rep=3;this.combo=0;
+    this.gy=groundY();this.waX=W*.24;
+    this.floats=[];this.fly=[];this.guests=[];this.btns=[];
+    this.t=0;this.ph=0;this.shake=0;this.truck=null;this.bubble=null;this.bubbleT=0;
+    this.left=Math.max(48,74-this.day*2);this.sp=1.4;
+  },
+  slotX(i){return W*.5-(this.slots.length-1)*55+i*110;},
+  slotY(){return H-74;},
+  truckCost(){return 22+this.day*4;},
+  restockCost(){return UPC.restock(SAVE.up.restock);},
+  shelfCost(){return UPC.shelf(SAVE.up.shelf);},
+  decoCost(){return UPC.deco(SAVE.up.deco);},
+  say(t){this.bubble=t;this.bubbleT=2.2;},
+  spawn(){
+    let j=0;for(const q of this.guests)if(!q.leaving&&q.ty!=='thief')j++;
+    if(j>=4)return;
+    const r=Math.random();let ty='normal';
+    if(this.day>=2&&r<.11)ty='thief';
+    else if(this.day>=2&&r<.34)ty='rush';
+    else if(this.day>=3&&r<.50)ty='big';
+    const q={ty,x:W+70,ph:Math.random()*6,leaving:false,angry:false,pat:1,
+      h:Math.round(74*GUEST[ty].sc),need:ty==='big'?3:1};
+    q.patMax=(11+SAVE.up.deco*2.4)*GUEST[ty].pat;
+    if(ty==='thief')q.slot=(Math.random()*this.slots.length)|0;
+    else q.want=this.slots[(Math.random()*this.slots.length)|0].t;
+    this.guests.push(q);
+    sfx.bell();
+  },
+  buyTruck(){
+    if(this.truck)return;
+    const c=this.truckCost();
+    if(SAVE.coin<c){this.say('钱不够叫车…');sfx.bad();return;}
+    addCoin(-c);this.truck={t:2.8};sfx.truck();this.say('进货中，稍等');
+  },
+  throwAt(q){
+    const s=this.slots[this.sel];
+    if(s.stock<=0){this.say('那格空了');sfx.bad();return;}
+    s.stock--;
+    this.fly.push({t:s.t,x0:this.waX+40,y0:this.gy-118,x:s.x,y:s.y,g:q,p:0,dur:.4});
+    sfx.snap();
+  },
+  resolve(f){
+    const q=f.g;
+    if(this.guests.indexOf(q)<0)return;
+    if(q.ty==='thief'){
+      this.guests.splice(this.guests.indexOf(q),1);
+      addCoin(18);this.shake=10;hitStop(.06);sfx.duang(.8);
+      burst(q.x,this.gy-q.h*.5,16,['#6B5A7A','#FFE9A8'],250,.6,5);
+      this.floats.push({x:q.x,y:this.gy-q.h-40,txt:'砸跑了 +¥18',l:1.3});
+      this.say('还想偷我的货');
+      return;
+    }
+    if(f.t===q.want){
+      q.need--;
+      if(q.need>0){
+        sfx.chomp(3);this.floats.push({x:q.x,y:this.gy-q.h-58,txt:'还要 '+q.need+' 份',l:1});
+        return;
+      }
+      const pay=Math.round(PRICE[q.want]*GUEST[q.ty].pay
+        *(1+Math.max(0,q.pat)*.5)*(1+Math.min(this.combo,12)*.06)*(1+SAVE.up.deco*.14));
+      this.combo++;this.served++;this.money+=pay;addCoin(pay);
+      q.leaving=true;sfx.coin();sfx.pop(this.combo);
+      this.floats.push({x:q.x,y:this.gy-q.h-52,txt:'+¥'+pay+(this.combo>2?'  ×'+this.combo:''),l:1.2});
+      burst(q.x,this.gy-q.h*.6,14,['#FFE9A8','#F08A2A','#FFFDF4'],230,.6,5);
+      if(this.combo%6===0)this.say('生意兴隆！');
+    }else{
+      this.guests.splice(this.guests.indexOf(q),1);
+      this.hurt(q,'不是这个！');
+    }
+  },
+  hurt(q,txt){
+    this.combo=0;this.rep--;this.lost++;
+    this.shake=14;hitStop(.09);sfx.bad();
+    this.floats.push({x:q.x,y:this.gy-q.h-52,txt:txt+' 口碑 -1',l:1.5,bad:true});
+    if(this.rep<=0)this.endDay();
+  },
+  endDay(){
+    if(this.phase==='report')return;
+    this.phase='report';this.fly.length=0;
+    best('shop',this.money);SAVE.day++;saveNow();
+    this.buildBtns();sfx.win();
+    toast(this.rep>0?'收摊！今天赚了 ¥'+this.money:'口碑砸了，提前收摊',1600);
+  },
+  buildBtns(){
+    const w=Math.min(430,W-40),x=W/2-w/2;let y=H/2-46;
+    const mk=(act,label,cost,sub)=>{const b={act,label,cost,x,y,w,h:44,sub};y+=50;return b;};
+    this.btns=[
+      mk('restock','货架上限 +2',this.restockCost(),'¥'+this.restockCost()+'　现在每格 '+this.slots[0].cap+' 份'),
+      mk('shelf','多加一格货架',this.shelfCost(),SAVE.up.shelf>=2?'已经满五格了':'¥'+this.shelfCost()),
+      mk('deco','装修 · 客人更有耐心',this.decoCost(),'¥'+this.decoCost()+'　也给小费'),
+      {act:'next',label:'开第 '+(SAVE.day)+' 天',x,y,w,h:48,cost:0,sub:''}
+    ];
+  },
+  clickPanel(){
+    const b=clickBtns(this.btns);
+    if(!b)return;
+    if(b.act==='next'){this.btns=[];this.phase='open';this.day=SAVE.day;this.open();return;}
+    if(SAVE.coin<b.cost){sfx.bad();this.say('钱不够…');return;}
+    addCoin(-b.cost);sfx.coin();
+    if(b.act==='restock'){SAVE.up.restock++;for(const s of this.slots)s.cap+=2;}
+    else if(b.act==='shelf'){if(SAVE.up.shelf<2)SAVE.up.shelf++;else addCoin(b.cost);}
+    else if(b.act==='deco')SAVE.up.deco++;
+    saveNow();this.buildBtns();
+  },
+  update(dt){
+    this.gy=groundY();this.t+=dt;this.ph+=dt;
+    if(this.bubbleT>0){this.bubbleT-=dt;if(this.bubbleT<=0)this.bubble=null;}
+    if(this.shake)this.shake=Math.max(0,this.shake-dt*40);
+    for(let i=this.floats.length-1;i>=0;i--){const f=this.floats[i];f.y-=44*dt;f.l-=dt;if(f.l<=0)this.floats.splice(i,1);}
+    updateParts(dt);
+    if(this.phase==='report'){this.clickPanel();return;}
+
+    this.left-=dt;
+    if(this.left<=0){this.endDay();return;}
+    if(this.truck){
+      this.truck.t-=dt;
+      if(this.truck.t<=0){for(const s of this.slots)s.stock=s.cap;this.truck=null;toast('货补满了');sfx.bell();}
+    }else{
+      this.sp-=dt;
+      if(this.sp<=0){
+        this.sp=Math.max(1.0,(3.3-this.day*.14-SAVE.up.deco*.25))*(.7+Math.random()*.6);
+        this.spawn();
+      }
+    }
+    const n=this.slots.length;
+    for(let i=0;i<n;i++)if(kTap('Digit'+(i+1)))this.sel=i;
+    if(kTap('KeyR'))this.buyTruck();
+    this.btns=[{act:'truck',label:'叫货车 ¥'+this.truckCost(),x:W-176,y:H-190,w:158,h:44,
+      cost:this.truckCost(),sub:''}];
+    const b=clickBtns(this.btns);
+    if(b)this.buyTruck();
+    if(ptr.tapped&&!b){
+      let used=false;
+      for(let i=0;i<n&&!used;i++){
+        const sx=this.slotX(i),sy=this.slotY();
+        if(ptr.x>sx-52&&ptr.x<sx+52&&ptr.y>sy-42&&ptr.y<sy+42){this.sel=i;sfx.pat();used=true;}
+      }
+      if(!used){
+        for(const q of this.guests){
+          if(q.leaving)continue;
+          if(Math.abs(ptr.x-q.x)<56&&ptr.y>this.gy-q.h-72&&ptr.y<this.gy+12){this.throwAt(q);used=true;break;}
+        }
+      }
+    }
+    if(kTap('Space')){
+      let front=null;
+      for(const q of this.guests)if(!q.leaving&&(!front||q.x<front.x))front=q;
+      if(front)this.throwAt(front);
+    }
+    let j=0;
+    for(let i=this.guests.length-1;i>=0;i--){
+      const q=this.guests[i];q.ph+=dt;
+      if(q.leaving){q.x+=300*dt;if(q.x>W+90)this.guests.splice(i,1);continue;}
+      q.tx=q.ty==='thief'?this.slotX(q.slot):W*.55+j++*110;
+      q.x+=(q.tx-q.x)*Math.min(1,dt*3.2);
+      if(q.ty==='thief'){
+        if(Math.abs(q.x-q.tx)<24){
+          const s=this.slots[q.slot],take=Math.min(3,s.stock);
+          s.stock-=take;this.guests.splice(i,1);
+          this.combo=0;this.rep--;this.lost++;this.shake=16;hitStop(.1);sfx.bad();
+          this.floats.push({x:q.x,y:this.gy-q.h-52,txt:'被偷走 '+take+' 份 口碑 -1',l:1.6,bad:true});
+          this.say('站住！');
+          if(this.rep<=0){this.endDay();return;}
+        }
+        continue;
+      }
+      q.pat-=dt/q.patMax;
+      if(q.pat<=0){
+        q.leaving=true;q.angry=true;
+        this.combo=0;this.rep--;this.lost++;this.shake=12;sfx.bad();
+        this.floats.push({x:q.x,y:this.gy-q.h-52,txt:'等太久跑了 口碑 -1',l:1.6,bad:true});
+        if(this.rep<=0){this.endDay();return;}
+      }
+    }
+    for(let i=this.fly.length-1;i>=0;i--){
+      const f=this.fly[i];f.p+=dt/f.dur;
+      const k=Math.min(1,f.p),tx=f.g.x,ty=this.gy-f.g.h*.72;
+      f.x=f.x0+(tx-f.x0)*k;
+      f.y=f.y0+(ty-f.y0)*k-Math.sin(k*Math.PI)*110;
+      if(k>=1){this.fly.splice(i,1);this.resolve(f);}
+    }
+    setHud('奶蛙小卖部','第 '+this.day+' 天 · 剩 '+Math.max(0,Math.ceil(this.left))+'s',
+      '♥'.repeat(Math.max(0,this.rep))+'♡'.repeat(Math.max(0,3-this.rep)),
+      '今日 ¥'+this.money+' · 连击 '+this.combo,
+      '点货架选货，点客人把货扔过去 · 空格招呼最前面那位 · R 叫货车');
+  },
+  draw(){
+    sky(g,'#FFEDC4','#F3C78E');
+    const sk=this.shake?(Math.random()-.5)*this.shake:0;
+    g.save();g.translate(sk,sk*.4);
+    hills(g,'#E0AE72',H*.54,24,T,.07);
+    ground(g,this.gy,'#B07A44','#D49A5F',0);
+    /* 摊子 */
+    const x0=W*.03,x1=W*.45,ry=this.gy-104;
+    g.fillStyle='#8A5A2C';g.fillRect(x0,ry,x1-x0,10);
+    for(let i=0;i<6;i++){g.fillStyle=i%2?'#FDF4DE':'#D8544A';g.fillRect(x0+i*(x1-x0)/6,ry+9,(x1-x0)/6,26);}
+    g.fillStyle='#B8433B';g.fillRect(x0,ry+35,x1-x0,7);
+    g.fillStyle='#A9713A';g.fillRect(x0,this.gy-56,x1-x0,56);
+    g.fillStyle='#C08B4A';g.fillRect(x0,this.gy-62,x1-x0,9);
+    g.fillStyle='#FDF4DE';rr(g,x0+8,ry+5,88,28,8);
+    g.fillStyle='#B8433B';g.font=FONT(14,900);g.textAlign='center';
+    g.fillText('奶蛙小卖部',x0+52,ry+24);
+    /* 客人 */
+    for(const q of this.guests){
+      shadow(g,q.x,this.gy+2,q.h*.3,.16);
+      drawMinion(g,q.x,this.gy,q.h,q.ph,true,false,GUEST[q.ty]);
+      if(q.ty==='thief'){
+        g.fillStyle='#FFE9A8';g.font=FONT(13,900);g.textAlign='center';
+        g.fillText('小偷！点它',q.x,this.gy-q.h-16);
+        continue;
+      }
+      const by=this.gy-q.h-52;
+      g.fillStyle='rgba(255,253,244,.96)';rr(g,q.x-31,by-22,62,42,12);
+      g.beginPath();g.moveTo(q.x-7,by+19);g.lineTo(q.x+7,by+19);g.lineTo(q.x,by+31);g.closePath();g.fill();
+      drawItem(g,q.want,q.x,by-1,15,0);
+      if(q.need>1){g.fillStyle='#6B4A12';g.font=FONT(12,900);g.textAlign='center';g.fillText('×'+q.need,q.x+21,by+16);}
+      const pw=58;
+      g.fillStyle='rgba(60,40,10,.35)';rr(g,q.x-pw/2,by-33,pw,7,4);
+      g.fillStyle=q.pat>.5?'#7BC46A':q.pat>.25?'#F0B53C':'#E1495A';
+      rr(g,q.x-pw/2+1,by-32,(pw-2)*Math.max(0,q.pat),5,3);
+    }
+    /* 奶蛙 */
+    shadow(g,this.waX,this.gy+2,48,.18);
+    drawWa(g,{x:this.waX,y:this.gy,h:152,
+      face:this.rep<=1?'strain':this.combo>2?'laugh':'happy',
+      sq:1,belly:1+Math.min(.22,this.combo*.025),arm:'up',leg:'stand',ph:this.ph,look:1});
+    if(this.bubble){
+      g.font=FONT(15,700);
+      const bw=Math.max(90,g.measureText(this.bubble).width+30);
+      const bx=Math.min(W-bw-10,Math.max(10,this.waX-bw/2)),byy=this.gy-214;
+      g.fillStyle='rgba(255,253,244,.96)';rr(g,bx,byy,bw,36,13);
+      g.fillStyle='#6B5228';g.textAlign='center';g.fillText(this.bubble,bx+bw/2,byy+24);
+    }
+    for(const f of this.fly)drawItem(g,f.t,f.x,f.y,17,f.p*9);
+    drawParts(g,0);
+    /* 货架 */
+    for(let i=0;i<this.slots.length;i++){
+      const s=this.slots[i],x=this.slotX(i),y=this.slotY();
+      g.fillStyle=i===this.sel?'rgba(255,233,168,.96)':'rgba(255,248,232,.80)';
+      rr(g,x-50,y-42,100,84,14);
+      if(i===this.sel){g.strokeStyle='#C07F18';g.lineWidth=3;g.beginPath();g.roundRect(x-50,y-42,100,84,14);g.stroke();}
+      g.globalAlpha=s.stock>0?1:.26;
+      drawItem(g,s.t,x,y-8,20,0);
+      g.globalAlpha=1;
+      g.fillStyle='#6B4A12';g.font=FONT(12,800);g.textAlign='center';
+      g.fillText(FOODS[s.t].n+' ¥'+PRICE[s.t],x,y+22);
+      g.fillStyle=s.stock>0?'#94794a':'#C3392F';g.font=FONT(12,700);
+      g.fillText(s.stock>0?('存 '+s.stock+'/'+s.cap):(''+(i+1)+' 键 · 卖空了'),x,y+34);
+    }
+    /* 货车 */
+    if(this.truck){
+      const k=1-Math.max(0,this.truck.t)/2.8,tx=W+90-k*(W*.28);
+      g.fillStyle='#C3392F';rr(g,tx-70,this.gy-70,120,52,8);
+      g.fillStyle='#FDF4DE';rr(g,tx+18,this.gy-58,34,40,6);
+      g.fillStyle='#3A2A10';g.beginPath();g.arc(tx-40,this.gy-12,16,0,6.2832);g.arc(tx+40,this.gy-12,16,0,6.2832);g.fill();
+      g.fillStyle='#FFFDF4';g.font=FONT(13,800);g.textAlign='center';g.fillText('进货中…',tx-10,this.gy-84);
+    }
+    for(const f of this.floats){
+      g.save();g.globalAlpha=Math.min(1,f.l*1.6);g.font=FONT(19,900);g.textAlign='center';
+      g.strokeStyle='rgba(70,40,10,.65)';g.lineWidth=4;g.fillStyle=f.bad?'#FFD9CF':'#FFFDF4';
+      g.strokeText(f.txt,f.x,f.y);g.fillText(f.txt,f.x,f.y);g.restore();
+    }
+    g.restore();
+    if(this.phase==='open')drawBtns(g,this.btns);
+    else{
+      panelBg(g,'第 '+this.day+' 天收摊','营收 ¥'+this.money+'　做成 '+this.served+' 单　砸了 '+this.lost+' 单　钱袋 ¥'+SAVE.coin);
+      drawBtns(g,this.btns);
+    }
+  }
+};
+
+/* ============ 模式六：舌头矿工 ============ */
+const LOOT={
+  pebble:{n:'碎石',v:6,w:1.8,r:15},
+  rock:{n:'大石头',v:22,w:6.5,r:27},
+  skewer:{n:'陈年烤串',v:16,w:1.0,r:18},
+  goldmelon:{n:'金西瓜',v:58,w:3.4,r:23},
+  pearl:{n:'珍珠',v:130,w:.9,r:12},
+  tnt:{n:'炸药桶',v:0,w:4.2,r:21}
+};
+function drawLoot(c,k,x,y,r,rot){
+  c.save();c.translate(x,y);if(rot)c.rotate(rot);
+  if(k==='pebble'||k==='rock'){
+    const gr=c.createLinearGradient(-r,-r,r,r);
+    gr.addColorStop(0,k==='rock'?'#A79E8C':'#CFC5AC');
+    gr.addColorStop(1,k==='rock'?'#6E6757':'#9A9078');
+    c.fillStyle=gr;c.beginPath();
+    for(let i=0;i<7;i++){
+      const a=i/7*6.2832,rad=r*(.82+.18*Math.sin(i*2.3+r));
+      if(i)c.lineTo(Math.cos(a)*rad,Math.sin(a)*rad*.92);else c.moveTo(Math.cos(a)*rad,Math.sin(a)*rad*.92);
+    }
+    c.closePath();c.fill();
+    c.fillStyle='rgba(255,255,255,.22)';ell(c,-r*.3,-r*.36,r*.3,r*.15,-.5);
+  }else if(k==='goldmelon'){
+    c.fillStyle='#8A6A16';c.beginPath();c.arc(0,0,r,0,6.2832);c.fill();
+    c.fillStyle='#F5CE4A';c.beginPath();c.arc(0,0,r*.9,0,6.2832);c.fill();
+    c.fillStyle='#E1495A';c.beginPath();c.arc(0,0,r*.62,0,6.2832);c.fill();
+    c.fillStyle='#3A2A10';
+    for(let i=0;i<5;i++){const a=i*1.26;c.beginPath();c.arc(Math.cos(a)*r*.4,Math.sin(a)*r*.4,r*.07,0,6.2832);c.fill();}
+    c.fillStyle='rgba(255,255,255,.5)';ell(c,-r*.42,-r*.44,r*.2,r*.12,-.6);
+  }else if(k==='pearl'){
+    const gr=c.createRadialGradient(-r*.3,-r*.35,r*.08,0,0,r);
+    gr.addColorStop(0,'#FFFFFF');gr.addColorStop(.6,'#CFEFFB');gr.addColorStop(1,'#7FB6D6');
+    c.fillStyle=gr;c.beginPath();c.arc(0,0,r,0,6.2832);c.fill();
+    c.fillStyle='#FFF';c.beginPath();c.arc(-r*.32,-r*.36,r*.22,0,6.2832);c.fill();
+  }else if(k==='skewer'){
+    drawItem(c,'skewer',0,0,r*1.1,0);
+  }else if(k==='tnt'){
+    c.fillStyle='#8A3A2C';rr(c,-r*.8,-r,r*1.6,r*2,r*.28);
+    c.fillStyle='#B84A38';rr(c,-r*.8,-r*.36,r*1.6,r*.72,3);
+    c.fillStyle='#FFFDF4';c.font=FONT(Math.round(r*.8),900);c.textAlign='center';
+    c.fillText('炸',0,r*.3);
+    c.strokeStyle='#5A4630';c.lineWidth=r*.14;
+    c.beginPath();c.moveTo(0,-r);c.quadraticCurveTo(r*.5,-r*1.5,r*.18,-r*1.8);c.stroke();
+    c.fillStyle='#FFD86A';c.beginPath();c.arc(r*.18,-r*1.84,r*.17,0,6.2832);c.fill();
+  }
+  c.restore();
+}
+const mine={
+  init(){this.depth=SAVE.depth;this.phase='dig';this.open();},
+  open(){
+    this.phase='dig';this.gy=Math.round(H*.30);this.px=Math.round(W*.5);this.py=this.gy-96;
+    this.ang=0;this.len=0;this.state='idle';this.att=null;
+    this.total=0;this.goal=180+(this.depth-1)*150;this.left=52;
+    this.t=0;this.shake=0;this.floats=[];this.btns=[];this.sq=1;this.sqV=0;
+    this.reach=(H-56-this.py)*(.66+Math.min(.32,SAVE.up.rope*.09));
+    this.gen();
+  },
+  pick(r){
+    const q=r();
+    if(q<.30)return 'pebble';
+    if(q<.52)return 'rock';
+    if(q<.70)return 'skewer';
+    if(q<.88)return 'goldmelon';
+    if(q<.955)return 'pearl';
+    return 'tnt';
+  },
+  gen(){
+    const r=rngOf(this.depth*7919+todayNum()*13);
+    this.loot=[];
+    const top=this.gy+72,bot=H-46;
+    for(let i=0;i<260&&this.loot.length<26;i++){
+      const k=this.pick(r),L=LOOT[k];
+      const x=52+r()*(W-104),y=top+r()*(bot-top);
+      if(Math.hypot(x-this.px,y-this.py)>this.reach*.95)continue;
+      let ok=true;
+      for(const o of this.loot)if(Math.hypot(o.x-x,o.y-y)<o.r+L.r+12){ok=false;break;}
+      if(ok)this.loot.push({k,x,y,r:L.r,ph:r()*6});
+    }
+  },
+  tip(){return {x:this.px+Math.sin(this.ang)*this.len,y:this.py+Math.cos(this.ang)*this.len};},
+  fire(){this.state='out';this.len=10;sfx.jump(.75);punch(this,1.16,-1.8);},
+  land(){
+    const o=this.att;this.att=null;
+    if(!o)return;
+    const i=this.loot.indexOf(o);if(i>=0)this.loot.splice(i,1);
+    if(o.k==='tnt'){this.boom(o);return;}
+    const L=LOOT[o.k],v=Math.round(L.v*(1+(this.depth-1)*.22));
+    this.total+=v;addCoin(v);sfx.coin();
+    this.floats.push({x:this.px,y:this.py-34,txt:L.n+' +¥'+v,l:1.2});
+    burst(this.px,this.py,12,['#FFE9A8','#F08A2A'],190,.5,4);
+    if(o.k==='skewer'){SAVE.bag++;saveNow();this.floats.push({x:this.px,y:this.py-62,txt:'存粮 +1',l:1.2});}
+    if(this.total>=this.goal)this.levelUp();
+  },
+  boom(o){
+    let gain=0;
+    for(let i=this.loot.length-1;i>=0;i--){
+      const q=this.loot[i];
+      if(Math.hypot(q.x-o.x,q.y-o.y)<152){
+        gain+=Math.round(LOOT[q.k].v*(1+(this.depth-1)*.22)*.5);
+        this.loot.splice(i,1);
+        burst(q.x,q.y,8,['#F08A2A','#E1495A','#FFE9A8'],260,.6,5);
+      }
+    }
+    this.total+=gain;addCoin(gain);
+    this.shake=26;hitStop(.12);slowMo(.4,.32);sfx.duang(1);sfx.bad();
+    burst(o.x,o.y,40,['#E1495A','#F08A2A','#FFE9A8','#4A3312'],420,.9,7);
+    this.floats.push({x:o.x,y:o.y-30,txt:'轰！+¥'+gain,l:1.4});
+    if(this.total>=this.goal)this.levelUp();
+  },
+  levelUp(){
+    if(this.phase==='up')return;
+    this.phase='up';this.state='idle';this.att=null;this.len=0;
+    const bonus=60+this.depth*20;
+    this.total+=bonus;addCoin(bonus);best('mine',this.total);
+    SAVE.depth=Math.max(SAVE.depth,this.depth+1);saveNow();
+    sfx.win();toast('凑够了！奖励 ¥'+bonus,1400);
+    this.buildBtns();
+  },
+  buildBtns(){
+    const w=Math.min(430,W-40),x=W/2-w/2;let y=H/2-52;
+    const mk=(act,label)=>{const cost=UPC[act](SAVE.up[act]),b={act,label,cost,x,y,w,h:44,
+      sub:'¥'+cost+'　当前 Lv'+SAVE.up[act]};y+=50;return b;};
+    this.btns=[mk('hook','出钩更快'),mk('pull','舌头更有力'),mk('rope','舌头更长'),
+      {act:'down',label:'下 到 第 '+(this.depth+1)+' 层',x,y,w,h:48,cost:0,sub:''}];
+  },
+  clickPanel(){
+    const b=clickBtns(this.btns);
+    if(!b)return;
+    if(b.act==='down'){this.depth++;saveNow();this.open();return;}
+    if(SAVE.coin<b.cost){sfx.bad();return;}
+    addCoin(-b.cost);SAVE.up[b.act]++;saveNow();sfx.coin();this.buildBtns();
+  },
+  update(dt){
+    this.t+=dt;this.gy=Math.round(H*.30);this.py=this.gy-96;
+    if(this.shake)this.shake=Math.max(0,this.shake-dt*42);
+    for(let i=this.floats.length-1;i>=0;i--){const f=this.floats[i];f.y-=44*dt;f.l-=dt;if(f.l<=0)this.floats.splice(i,1);}
+    updateParts(dt);
+    spring(this,dt,300,17);
+    if(this.phase==='up'){this.clickPanel();return;}
+    if(this.loot.length===0)this.gen();
+    this.left-=dt;
+    if(this.left<=0){
+      best('mine',this.total);saveNow();sfx.over();openMenu();
+      toast('第 '+this.depth+' 层差 ¥'+Math.max(0,this.goal-this.total)+' 没凑够',2200);
+      return;
+    }
+    if(this.state==='idle'){
+      this.ang=Math.sin(this.t*1.05)*1.16;
+      if(kTap('Space','ArrowDown','KeyJ')||ptr.tapped)this.fire();
+    }else if(this.state==='out'){
+      this.len+=(560+SAVE.up.hook*95)*dt;
+      const p=this.tip();
+      for(const o of this.loot){
+        if(Math.hypot(o.x-p.x,o.y-p.y)<o.r+13){
+          this.att=o;this.state='back';sfx.duang(.35);punch(this,.86,2.2);
+          burst(o.x,o.y,10,['#C9B99A','#FFFDF4'],160,.5,4);
+          break;
+        }
+      }
+      if(this.len>=this.reach){this.len=this.reach;this.state='back';}
+    }else{
+      const w=this.att?LOOT[this.att.k].w:0;
+      this.len-=(340+SAVE.up.pull*80)/(1+w*.42)*dt;
+      if(this.len<=0){this.len=0;this.state='idle';this.land();}
+    }
+    setHud('舌头矿工','第 '+this.depth+' 层 · 剩 '+Math.max(0,Math.ceil(this.left))+'s',
+      '¥'+this.total+' / '+this.goal,
+      '最深 ¥'+SAVE.best.mine+' · 存粮 '+SAVE.bag,
+      '空格或点一下甩舌头，越沉的东西拉回来越慢');
+  },
+  draw(){
+    sky(g,'#7A5A78','#D08A5E');
+    const sk=this.shake?(Math.random()-.5)*this.shake:0;
+    g.save();g.translate(sk,sk*.5);
+    hills(g,'#8E6A52',this.gy-16,16,T,.05);
+    g.fillStyle='#6E4A32';g.fillRect(0,this.gy,W,H-this.gy);
+    const r=rngOf(this.depth*31+7);
+    g.save();g.globalAlpha=.20;
+    for(let i=0;i<70;i++){
+      const x=r()*W,y=this.gy+8+r()*(H-this.gy-8);
+      g.fillStyle=r()<.5?'#5A3A26':'#8A6244';g.fillRect(x,y,14+r()*46,3);
+    }
+    g.restore();
+    g.fillStyle='rgba(0,0,0,.28)';g.fillRect(0,this.gy,W,5);
+    for(const o of this.loot)drawLoot(g,o.k,o.x,o.y,o.r,Math.sin(o.ph+T*.6)*.06);
+    const p=this.tip();
+    g.strokeStyle='#DE7E74';g.lineWidth=this.att?13:9;g.lineCap='round';
+    g.beginPath();g.moveTo(this.px,this.py);g.lineTo(p.x,p.y);g.stroke();
+    g.strokeStyle='rgba(255,255,255,.32)';g.lineWidth=3;
+    g.beginPath();g.moveTo(this.px,this.py);g.lineTo(p.x,p.y);g.stroke();
+    g.fillStyle='#C85F60';g.beginPath();g.arc(p.x,p.y,this.att?15:11,0,6.2832);g.fill();
+    if(this.att)drawLoot(g,this.att.k,p.x,p.y,LOOT[this.att.k].r,0);
+    shadow(g,this.px,this.gy+4,52,.2);
+    const heavy=this.att&&LOOT[this.att.k].w>3;
+    drawWa(g,{x:this.px,y:this.gy,h:118,
+      face:this.state==='out'?'oh':heavy?'strain':this.total>=this.goal?'laugh':'happy',
+      sq:this.sq,belly:1,arm:'down',leg:'stand',ph:this.t,look:Math.sin(this.ang)});
+    if(this.state==='idle'){
+      g.save();g.globalAlpha=.28;g.strokeStyle='#FFFDF4';g.lineWidth=2;g.setLineDash([7,9]);
+      g.beginPath();g.moveTo(this.px,this.py);
+      g.lineTo(this.px+Math.sin(this.ang)*this.reach,this.py+Math.cos(this.ang)*this.reach);
+      g.stroke();g.restore();
+    }
+    drawParts(g,0);
+    for(const f of this.floats){
+      g.save();g.globalAlpha=Math.min(1,f.l*1.6);g.font=FONT(19,900);g.textAlign='center';
+      g.strokeStyle='rgba(70,40,10,.65)';g.lineWidth=4;g.fillStyle='#FFFDF4';
+      g.strokeText(f.txt,f.x,f.y);g.fillText(f.txt,f.x,f.y);g.restore();
+    }
+    const bw=Math.min(300,W-60),bx=W/2-bw/2,by=H-46;
+    g.fillStyle='rgba(40,24,8,.45)';rr(g,bx,by,bw,14,7);
+    g.fillStyle=this.total>=this.goal?'#7BC46A':'#FFE9A8';
+    rr(g,bx+2,by+2,(bw-4)*Math.min(1,this.total/this.goal),10,5);
+    g.fillStyle='#F4E3BD';g.font=FONT(12,700);g.textAlign='center';
+    g.fillText('目标 ¥'+this.goal+'　已挖 ¥'+this.total,W/2,by+32);
+    g.restore();
+    if(this.phase==='up'){
+      panelBg(g,'第 '+this.depth+' 层收工','钱袋 ¥'+SAVE.coin+'　升级买在钩子上，下一层更深更值钱');
+      drawBtns(g,this.btns);
+    }
+  }
+};
+
 /* ============ 场景表 ============ */
-const scenes={title:titleScene,menu:menuScene,jump,catch:catchMode,fire:fireMode,pet};
+const scenes={title:titleScene,menu:menuScene,jump,catch:catchMode,fire:fireMode,shop,mine,pet};
 
 /* ============ 主循环 ============ */
 let last=performance.now();
