@@ -52,6 +52,11 @@ canvas#game{display:block;width:100%;height:100%}
 .hud-l span{display:block;margin-top:3px;font-size:12px;font-weight:600;letter-spacing:1px;color:#e6cf9e;text-shadow:0 2px 6px rgba(0,0,0,.6)}
 .hud-r{text-align:right;font-size:15px;letter-spacing:1px;color:#fff5dd;text-shadow:0 2px 8px rgba(0,0,0,.6)}
 .hud-r em{font-style:normal;display:block;font-size:12px;font-weight:600;color:#e6cf9e;margin-top:2px}
+.hud-l{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.backbtn{pointer-events:auto;cursor:pointer;font:inherit;font-weight:800;font-size:12px;letter-spacing:1px;
+  padding:7px 15px;border-radius:999px;color:#ffe9a8;background:rgba(58,43,24,.5);border:0;
+  box-shadow:inset 0 0 0 1px rgba(255,233,168,.34),0 4px 12px rgba(0,0,0,.3);transition:transform .08s,background .08s}
+.backbtn:active{transform:translateY(2px);background:rgba(58,43,24,.72)}
 
 .hint{position:fixed;bottom:16px;left:0;right:0;text-align:center;font-size:13px;letter-spacing:2px;
   color:#f4e3bd;text-shadow:0 2px 8px rgba(0,0,0,.65);pointer-events:none}
@@ -76,7 +81,7 @@ canvas#game{display:block;width:100%;height:100%}
 <div id="stage"><canvas id="game"></canvas></div>
 
 <div id="hud" class="hud" hidden>
-  <div class="hud-l"><b id="hudMode"></b><span id="hudSub"></span></div>
+  <div class="hud-l"><button class="backbtn" id="btnBack">‹ 菜单</button><b id="hudMode"></b><span id="hudSub"></span></div>
   <div class="hud-r"><span id="hudStat"></span><em id="hudNote"></em></div>
 </div>
 <div id="hint" class="hint" hidden></div>
@@ -88,7 +93,7 @@ canvas#game{display:block;width:100%;height:100%}
     <div class="logo-sub">DUANGDUANG 大肚子乐园</div>
     <p class="tagline">一只来路不明的奶黄色生物。<br>没人说得清它到底是蛙还是龙，<br>但它肚子弹起来的那声响，全村都听得见。</p>
     <button class="btn" id="toMenu">开始玩</button>
-    <div class="fine">本地单文件小游戏 · 双击即玩</div>
+    <div class="fine">手机浏览器打开就能玩 · 六个模式共用一个钱袋</div>
   </div>
 </section>
 
@@ -103,7 +108,7 @@ canvas#game{display:block;width:100%;height:100%}
       <button class="card" data-mode="mine"><canvas class="prev"></canvas><b>舌头矿工</b><i>甩舌头抓矿<br>越沉的拉得越慢</i></button>
       <button class="card" data-mode="pet"><canvas class="prev"></canvas><b>养一只奶蛙</b><i>戳肚子听 duang<br>没有输赢</i></button>
     </div>
-    <div class="keys">空格 / 方向键 / 鼠标拖拽 都能玩 &nbsp;·&nbsp; ESC 回菜单 &nbsp;·&nbsp; M 静音<br>六个模式共用一个钱袋，挖来的钱能进货，赚的钱能买粮</div>
+    <div class="keys">键盘空格 / 方向键、鼠标拖拽、手机触屏都能玩 &nbsp;·&nbsp; ESC 或点左上角「‹ 菜单」回来 &nbsp;·&nbsp; M 静音<br>六个模式共用一个钱袋，挖来的钱能进货，赚的钱能买粮</div>
   </div>
 </section>
 
@@ -1630,6 +1635,7 @@ function frame(now){
 }
 document.getElementById('toMenu').addEventListener('click',()=>{unlockAudio();openMenu();});
 document.querySelectorAll('.card').forEach(c=>c.addEventListener('click',()=>{unlockAudio();play(c.dataset.mode);}));
+document.getElementById('btnBack').addEventListener('click',e=>{e.stopPropagation();goMenu();});
 showScreen('title');
 requestAnimationFrame(frame);
 </script>
